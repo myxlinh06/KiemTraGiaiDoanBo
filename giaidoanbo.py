@@ -102,7 +102,7 @@ st.set_page_config(page_title="🐄 Giai đoạn bò", layout="wide")
 st.title("🐄 Kiểm tra giai đoạn bò")
 st.markdown("Tool kiểm tra dữ liệu bò theo rule.")
 
-limit = st.number_input("Số lượng records lấy từ DB:", min_value=1, max_value=1000, value=10)
+limit = st.number_input("Số lượng records lấy từ DB:", min_value=1, max_value=150000, value=10)
 
 if st.button("Kiểm tra dữ liệu"):
     with st.spinner("Đang lấy dữ liệu từ MongoDB..."):
