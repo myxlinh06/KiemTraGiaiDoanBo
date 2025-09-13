@@ -16,7 +16,7 @@ def get_mongo_collection():
 def classify_cow(doc):
     now = datetime.now()
 
-    # --- Map field theo yêu cầu ---
+    # --- Map field ---
     cow_id = str(doc.get("_id"))
     ear_tag = doc.get("SoTai", "")
     birth_date = None
@@ -35,66 +35,84 @@ def classify_cow(doc):
     pregnant_months = doc.get("SoThangMangThai", 0) or 0
     group = doc.get("NhomBo", "")
     current_stage = doc.get("PhanLoaiBo", "")
+    calf_age_days = doc.get("SoNgayTuoiBeCon", None)  # số ngày tuổi bê con (cho bò mẹ)
 
     # --- Tính số ngày tuổi ---
     age_days = ((now - birth_date).days + 1) if birth_date else None
-    pregnant_days = pregnant_months * 30  # đổi sang ngày (ước lượng)
+    pregnant_days = pregnant_months * 30  # số ngày mang thai
 
-    # ===== Rule phân loại =====
+    # ===== RULE =====
     if age_days is not None:
-        # Chuyển nhóm bê - bò
-        if age_days <= 360:
-            if age_days <= 60:
-                return "BeSinh"
-            elif age_days <= 120:
-                return "BeTheoMe"
-            elif age_days <= 210:
-                return "BeCaiSua"
-            elif age_days <= 360:
-                return "BoNuoiThitBCT8_12" if gender == "đực" else "BoHauBi"
 
-        # Bò đực
-        if gender == "đực":
-            if 360 < age_days <= 540:
+        # ==== GIAI ĐOẠN BÊ ====
+        if age_days <= 60:
+            return "BeSinh"
+        elif 60 < age_days <= 120:
+            return "BeTheoMe"
+        elif 120 < age_days <= 210:
+            return "BeCaiSua"
+        elif 210 < age_days <= 360:
+            if gender == "đực":
+                return "BoNuoiThitBCT8_12"
+            elif gender == "cái":
+                return "BoHauBi"
+
+        # ==== GIAI ĐOẠN BÒ HẬU BỊ ====
+        if 360 < age_days <= 540:
+            if gender == "đực":
                 return "BoNuoiThitBCT"
-            elif 540 < age_days <= 600:
-                return "BoNuoiThitBCT18_20"
-            elif 600 < age_days <= 690 and 430 <= weight <= 510:
-                return "BoVoBeoNho"
-            elif 690 < age_days <= 720 and 510 < weight <= 550:
-                return "BoVoBeoLon"
-            elif age_days > 720 and weight > 550:
-                return "BoDucChoBanThuongPham"
-
-        # Bò cái
-        if gender == "cái":
-            if 360 < age_days <= 540:
+            elif gender == "cái":
                 return "BoHauBiChoPhoi"
-            elif age_days > 540:
-                # Mang thai
-                if pregnant_days > 0:
-                    if pregnant_days <= 210:
-                        return "BoMangThaiNho"
-                    elif pregnant_days <= 270:
-                        return "BoMangThaiLon"
-                    else:
-                        return "BoChoDe"
-                # Vỗ béo
-                elif 600 < age_days <= 690 and 380 <= weight <= 450:
-                    return "BoVoBeoNho"
-                elif 690 < age_days <= 720 and 450 < weight <= 480:
-                    return "BoVoBeoLon"
-                elif age_days > 720 and weight > 480:
-                    return "BoCaiChoBanThuongPham"
 
-    # Đực giống
-    if group == "BoDucGiong":
-        return "BoDucGiong"
+        if 540 < age_days <= 600 and gender == "đực":
+            return "BoNuoiThitBCT18_20"
 
-    # Cách ly
+        if age_days > 540 and gender == "cái":
+            # Mang thai
+            if pregnant_days > 0:
+                if pregnant_days <= 210:
+                    return "BoMangThaiNho"
+                elif pregnant_days <= 270:
+                    return "BoMangThaiLon"
+                else:
+                    return "BoChoDe"
+
+            # Bò mẹ nuôi con
+            if calf_age_days is not None:
+                if calf_age_days <= 60:
+                    return "BoMeNuoiConNho"
+                elif 60 < calf_age_days <= 120:
+                    return "BoMeNuoiConLon"
+
+            # Nếu không phải bò mẹ nuôi con -> bò chờ phối
+            return "BoChoPhoi"
+
+        # ==== VỖ BÉO ====
+        if 600 < age_days <= 690:
+            if gender == "đực" and 430 <= weight <= 510:
+                return "BoVoBeoNho"
+            if gender == "cái" and 380 <= weight <= 450:
+                return "BoVoBeoNho"
+
+        if 690 < age_days <= 720:
+            if gender == "đực" and 510 < weight <= 550:
+                return "BoVoBeoLon"
+            if gender == "cái" and 450 < weight <= 480:
+                return "BoVoBeoLon"
+
+        if age_days > 720:
+            if gender == "đực" and weight > 550:
+                return "BoDucChoBanThuongPham"
+            if gender == "cái" and weight > 480:
+                return "BoCaiChoBanThuongPham"
+
+    # ==== NHÓM ĐẶC BIỆT ====
+    if group == "BoXuLySinhSan":
+        return "BoXuLySinhSan"
     if group == "BoCachLy":
         return "BoCachLy"
-
+    if group == "BoDucGiong":
+        return "BoDucGiong"
     return "KhongXacDinh"
 
 # ====== Streamlit App ======
