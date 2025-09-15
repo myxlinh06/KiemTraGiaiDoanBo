@@ -5,12 +5,18 @@ import streamlit as st
 from datetime import datetime
 
 # ====== Kết nối MongoDB ======
-def get_mongo_collection():
-    """Kết nối tới MongoDB"""
+# def get_mongo_collection():
+#     """Kết nối tới MongoDB"""
+#     uri = "mongodb://root:tgx2025@103.48.84.200:27017/"
+#     client = MongoClient(uri, serverSelectionTimeoutMS=5000)
+#     db = client["QuanLyTrangTraiDb"]
+#     return db["collection_name"]
+def get_mongo_collection(collection_name: str):
+    """Kết nối tới MongoDB và trả về collection theo tên"""
     uri = "mongodb://root:tgx2025@103.48.84.200:27017/"
     client = MongoClient(uri, serverSelectionTimeoutMS=5000)
     db = client["QuanLyTrangTraiDb"]
-    return db["BoNhapTrai_1"]
+    return db[collection_name]
 
 # ====== Rule phân loại ======
 def classify_cow(doc):
@@ -180,10 +186,21 @@ st.markdown("Tool kiểm tra dữ liệu bò theo rule.")
 
 limit = st.number_input("Số lượng records lấy từ DB:", min_value=1, max_value=150000, value=10)
 
-# --- Select option ---
+# ====== Selectbox chọn trại ======
+trai_options = {
+    "Trại IA PUCH": "BoNhapTrai",
+    "Trại EA H'LEO": "BoNhapTrai_1",
+    "Trại AD1": "BoNhapTrai_2",
+    "Trại ERC": "BoNhapTrai_3",
+    "Trại BSA": "BoNhapTrai_4",
+}
+selected_trai = st.selectbox("Chọn trại:", list(trai_options.keys()))
+
+# ====== Chọn nhóm bò ======
 group_options = ["Bo", "Be", "BoChuyenVoBeo", "BoDucGiong"]
 selected_group = st.selectbox("Chọn nhóm bò:", group_options)
 
+# ====== Chọn phân loại bò ======
 phanloai_options = [
     "BeSinh", "BeTheoMe", "BeCaiSua", "BoHauBi",
     "BoNuoiThitBCT", "BoNuoiThitBCT8_12", "BoNuoiThitBCT18_20",
@@ -195,16 +212,17 @@ phanloai_options = [
 ]
 selected_phanloai = st.selectbox("Chọn phân loại bò:", ["Tất cả"] + phanloai_options)
 
-# --- Query ---
+# ====== Query DB ======
 if st.button("Kiểm tra dữ liệu"):
     with st.spinner("Đang lấy dữ liệu từ MongoDB..."):
-        cows = get_mongo_collection()
+        cows = get_mongo_collection(trai_options[selected_trai])  # <-- truyền collection_name
 
         query = {"NhomBo": selected_group}
         if selected_phanloai != "Tất cả":
             query["PhanLoaiBo"] = selected_phanloai
 
         docs = list(cows.find(query).limit(limit))
+
 
     results = []
     for d in docs:
