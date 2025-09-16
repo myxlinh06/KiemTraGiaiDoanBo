@@ -37,7 +37,6 @@ def classify_cow(doc):
                 birth_date = None
 
     gender = str(doc.get("GioiTinhBe", "")).lower()
-    weight = doc.get("TrongLuongNhap", 0) or 0
     def safe_int(value, default=0):
         try:
             return int(value)
@@ -50,7 +49,7 @@ def classify_cow(doc):
     current_stage = doc.get("PhanLoaiBo", "")
     
     # --- Tính số ngày tuổi ---
-    age_days = ((now - birth_date).days + 1) if birth_date else None
+    age_days = (now.date() - birth_date.date()).days + 1 if birth_date else None
 
     # ===== RULE =====
     if age_days is not None:
@@ -72,7 +71,7 @@ def classify_cow(doc):
         if 360 < age_days <= 540:
             if gender == "đực":
                 return "BoNuoiThitBCT"
-            elif gender == "cái":
+            elif gender == "cái" and pregnant_days ==0:
                 return "BoHauBiChoPhoi"
 
         if 540 < age_days <= 600 and gender == "đực":
@@ -80,22 +79,23 @@ def classify_cow(doc):
 
         # ==== VỖ BÉO ====
         if 600 < age_days <= 690:
-            if gender == "đực" and 430 <= weight <= 510:
+            if gender == "đực":
                 return "BoVoBeoNho"
-            if gender == "cái" and 380 <= weight <= 450:
+            if gender == "cái" and pregnant_days ==0:
                 return "BoVoBeoNho"
 
         if 690 < age_days <= 720:
-            if gender == "đực" and 510 < weight <= 550:
+            if gender == "đực":
                 return "BoVoBeoLon"
-            if gender == "cái" and 450 < weight <= 480:
+            if gender == "cái" and pregnant_days ==0:
                 return "BoVoBeoLon"
 
         if age_days > 720:
-            if gender == "đực" and weight > 550:
+            if gender == "đực":
                 return "BoDucChoBanThuongPham"
-            if gender == "cái" and weight > 480:
+            if gender == "cái" and pregnant_days == 0:
                 return "BoCaiChoBanThuongPham"
+            
     # ==== Bò mẹ nuôi con / bò mang thai / bò chờ phối ====
     if gender == "cái":
         # Mang thai
@@ -184,7 +184,7 @@ st.set_page_config(page_title="🐄 Giai đoạn bò", layout="wide")
 st.title("🐄 Kiểm tra giai đoạn bò")
 st.markdown("Tool kiểm tra dữ liệu bò theo rule.")
 
-limit = st.number_input("Số lượng records lấy từ DB:", min_value=1, max_value=150000, value=10)
+# limit = st.number_input("Số lượng records lấy từ DB:", min_value=1, max_value=150000, value=10)
 
 # ====== Selectbox chọn trại ======
 trai_options = {
@@ -208,20 +208,20 @@ phanloai_options = [
     "BoMangThaiNho", "BoMangThaiLon", "BoChoDe",
     "BoMeNuoiConNho", "BoMeNuoiConLon",
     "BoVoBeoNho", "BoVoBeoLon", "BoDucChoBanThuongPham", "BoCaiChoBanThuongPham",
-    "BoXuLySinhSan", "BoCachLy", "BoDucGiong", "BoNhap"
+    "BoXuLySinhSan", "BoCachLy", "BoDucGiong"
 ]
 selected_phanloai = st.selectbox("Chọn phân loại bò:", ["Tất cả"] + phanloai_options)
 
 # ====== Query DB ======
 if st.button("Kiểm tra dữ liệu"):
     with st.spinner("Đang lấy dữ liệu từ MongoDB..."):
-        cows = get_mongo_collection(trai_options[selected_trai])  # <-- truyền collection_name
+        cows = get_mongo_collection(trai_options[selected_trai]) 
 
         query = {"NhomBo": selected_group}
         if selected_phanloai != "Tất cả":
             query["PhanLoaiBo"] = selected_phanloai
 
-        docs = list(cows.find(query).limit(limit))
+        docs = list(cows.find(query)) 
 
 
     results = []
@@ -235,7 +235,6 @@ if st.button("Kiểm tra dữ liệu"):
     "SoTai": d.get("SoTai", ""),
     "NgaySinh": str(d.get("NgaySinh")),
     "GioiTinhBe": d.get("GioiTinhBe", ""),
-    "TrongLuongNhap": d.get("TrongLuongNhap", ""),
     "SoNgayMangThai": d.get("SoNgayMangThai", ""),
     "NhomBo": d.get("NhomBo", ""),
     "PhanLoaiBo (DB)": actual,
