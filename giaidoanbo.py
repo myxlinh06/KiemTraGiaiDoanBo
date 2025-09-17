@@ -52,7 +52,7 @@ def classify_cow(doc):
     age_days = (now.date() - birth_date.date()).days + 1 if birth_date else None
 
     # ===== RULE =====
-    if age_days is not None:
+    if age_days is not None and group != "LoaiThai" and group != "XuatBan":
 
         # ==== GIAI ĐOẠN BÊ ====
         if age_days <= 60:
@@ -69,7 +69,7 @@ def classify_cow(doc):
 
         # ==== GIAI ĐOẠN BÒ HẬU BỊ ====
         if 360 < age_days <= 540:
-            if gender == "đực":
+            if gender == "đực" and group != "BoDucGiong":
                 return "BoNuoiThitBCT"
             elif gender == "cái" and pregnant_days ==0:
                 return "BoHauBiChoPhoi"
@@ -79,25 +79,25 @@ def classify_cow(doc):
 
         # ==== VỖ BÉO ====
         if 600 < age_days <= 690:
-            if gender == "đực":
+            if gender == "đực" and group != "BoDucGiong":
                 return "BoVoBeoNho"
             if gender == "cái" and pregnant_days ==0:
                 return "BoVoBeoNho"
 
         if 690 < age_days <= 720:
-            if gender == "đực":
+            if gender == "đực" and group != "BoDucGiong":
                 return "BoVoBeoLon"
             if gender == "cái" and pregnant_days ==0:
                 return "BoVoBeoLon"
 
         if age_days > 720:
-            if gender == "đực":
+            if gender == "đực" and group != "BoDucGiong":
                 return "BoDucChoBanThuongPham"
-            if gender == "cái" and pregnant_days == 0:
-                return "BoCaiChoBanThuongPham"
+            if gender == "cái" and pregnant_days==0:
+                return "BoDucChoBanThuongPham"
             
     # ==== Bò mẹ nuôi con / bò mang thai / bò chờ phối ====
-    if gender == "cái":
+    if gender == "cái" and group != "LoaiThai" and group != "XuatBan":
         # Mang thai
         if pregnant_days > 0:
             if pregnant_days <= 210:
@@ -106,6 +106,17 @@ def classify_cow(doc):
                 return "BoMangThaiLon"
             else:
                 return "BoChoDe"
+            
+            # Bò xử lý sinh sản
+        nghiep_vu = doc.get("NghiepVuHienTai", "")
+        lieu_trinh = doc.get("LieuTrinhApDungHienTai") or {}
+        if not isinstance(lieu_trinh, dict):
+            lieu_trinh = {}
+
+        cong_viec = lieu_trinh.get("CongViec", "")
+
+        if nghiep_vu == "PhoiGiong" and cong_viec == "Rút vòng + Tiêm PGF2α 2ml" or cong_viec == "Đặt vòng + Tiêm GnRH 2.5ml" or cong_viec == "Tiêm GnRH 2.5ml" and group != "BoVoBeo":
+            return "BoXuLySinhSan"   
 
         # Nếu có thông tin sinh sản 
         tinh_trang = doc.get("TinhTrangSinhSan", "")
@@ -142,11 +153,7 @@ def classify_cow(doc):
         # Nếu không rơi vào các case trên → bò chờ phối mặc định
         return "BoChoPhoi"
 
-    
-    # ==== NHÓM ĐẶC BIỆT ====
-    if group == "BoXuLySinhSan":
-        return "BoXuLySinhSan"
-    if group == "BoCachLy":
+    if current_stage == "BoCachLy":
         return "BoCachLy"
     if group == "BoDucGiong":
         return "BoDucGiong"
@@ -207,7 +214,7 @@ phanloai_options = [
     "BoHauBiChoPhoi", "BoChoPhoi", "BoMoiPhoi",
     "BoMangThaiNho", "BoMangThaiLon", "BoChoDe",
     "BoMeNuoiConNho", "BoMeNuoiConLon",
-    "BoVoBeoNho", "BoVoBeoLon", "BoDucChoBanThuongPham", "BoCaiChoBanThuongPham",
+    "BoVoBeoNho", "BoVoBeoLon", "BoDucChoBanThuongPham",
     "BoXuLySinhSan", "BoCachLy", "BoDucGiong"
 ]
 selected_phanloai = st.selectbox("Chọn phân loại bò:", ["Tất cả"] + phanloai_options)
@@ -222,7 +229,7 @@ if st.button("Kiểm tra dữ liệu"):
             query["PhanLoaiBo"] = selected_phanloai
 
         docs = list(cows.find(query)) 
-
+      
 
     results = []
     for d in docs:
@@ -248,3 +255,4 @@ if st.button("Kiểm tra dữ liệu"):
 
     st.subheader("📋 Kết quả kiểm tra")
     st.dataframe(results)
+
