@@ -19,14 +19,30 @@ def get_mongo_collection(collection_name: str):
     return db[collection_name]
 
 # ====== Rule phân loại ======
+def get_age_days(birth_date):
+    """Trả về số ngày tuổi từ NgaySinh"""
+    if not birth_date:
+        return None
+    try:
+        if isinstance(birth_date, str):
+            birth_date = datetime.fromisoformat(birth_date)
+        elif not isinstance(birth_date, datetime):
+            return None
+        return (datetime.now().date() - birth_date.date()).days + 1
+    except Exception:
+        return None
+
+
 def classify_cow(doc):
     now = datetime.now()
 
     # --- Map field ---
     cow_id = str(doc.get("_id"))
     ear_tag = doc.get("SoTai", "")
-    birth_date = None
+
+    # Ngày sinh
     bd = doc.get("NgaySinh")
+    birth_date = None
     if bd:
         if isinstance(bd, datetime):
             birth_date = bd
@@ -37,6 +53,7 @@ def classify_cow(doc):
                 birth_date = None
 
     gender = str(doc.get("GioiTinhBe", "")).lower()
+
     def safe_int(value, default=0):
         try:
             return int(value)
@@ -47,9 +64,9 @@ def classify_cow(doc):
 
     group = doc.get("NhomBo", "")
     current_stage = doc.get("PhanLoaiBo", "")
-    
+
     # --- Tính số ngày tuổi ---
-    age_days = (now.date() - birth_date.date()).days + 1 if birth_date else None
+    age_days = get_age_days(birth_date)
 
     # ===== RULE =====
     if age_days is not None and group != "LoaiThai" and group != "XuatBan":
@@ -191,7 +208,7 @@ st.set_page_config(page_title="🐄 Giai đoạn bò", layout="wide")
 st.title("🐄 Kiểm tra giai đoạn bò")
 st.markdown("Tool kiểm tra dữ liệu bò theo rule.")
 
-# limit = st.number_input("Số lượng records lấy từ DB:", min_value=1, max_value=150000, value=10)
+limit = st.number_input("Số lượng records lấy từ DB:", min_value=1, max_value=150000, value=10)
 
 # ====== Selectbox chọn trại ======
 trai_options = {
@@ -228,7 +245,8 @@ if st.button("Kiểm tra dữ liệu"):
         if selected_phanloai != "Tất cả":
             query["PhanLoaiBo"] = selected_phanloai
 
-        docs = list(cows.find(query)) 
+        docs = list(cows.find(query).limit(limit))
+ 
       
 
     results = []
@@ -237,10 +255,15 @@ if st.button("Kiểm tra dữ liệu"):
         actual = d.get("PhanLoaiBo")
         is_ok = (expected == actual)
 
+        bd = d.get("NgaySinh")
+        age_days = get_age_days(bd)
+
         results.append({
     "_id": str(d.get("_id")),
+    "✅ Đúng/❌ Sai": "✅ Đúng" if expected == actual else "❌ Sai",
     "SoTai": d.get("SoTai", ""),
     "NgaySinh": str(d.get("NgaySinh")),
+    "Số ngày tuổi": age_days if age_days is not None else "",
     "GioiTinhBe": d.get("GioiTinhBe", ""),
     "SoNgayMangThai": d.get("SoNgayMangThai", ""),
     "NhomBo": d.get("NhomBo", ""),
@@ -248,8 +271,8 @@ if st.button("Kiểm tra dữ liệu"):
     "TinhTrangSS (DB)": d.get("TinhTrangSinhSan", ""),
     "Tên giai đoạn (DB)": stage_map.get(actual, "Không rõ"),
     "PhanLoaiBo (Expected)": expected,
-    "Tên giai đoạn (Expected)": stage_map.get(expected, "Không rõ"),
-    "✅ Đúng/❌ Sai": "✅ Đúng" if expected == actual else "❌ Sai"
+    "Tên giai đoạn (Expected)": stage_map.get(expected, "Không rõ")
+
 })
 
 
