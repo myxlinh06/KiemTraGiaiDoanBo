@@ -85,8 +85,8 @@ def classify_cow(doc):
                 return "BoHauBi"
 
         # ==== GIAI ĐOẠN BÒ HẬU BỊ ====
-        if 360 < age_days <= 540:
-            if gender == "đực" and group != "BoDucGiong":
+        if 360 < age_days <= 540 and group == "Bo":
+            if gender == "đực":
                 return "BoNuoiThitBCT"
             elif gender == "cái" and pregnant_days ==0:
                 return "BoHauBiChoPhoi"
@@ -268,7 +268,7 @@ if st.button("Kiểm tra dữ liệu"):
     "SoNgayMangThai": d.get("SoNgayMangThai", ""),
     "NhomBo": d.get("NhomBo", ""),
     "PhanLoaiBo (DB)": actual,
-    "TinhTrangSS (DB)": d.get("TinhTrangSinhSan", ""),
+    # "TinhTrangSS (DB)": d.get("TinhTrangSinhSan", ""),
     "Tên giai đoạn (DB)": stage_map.get(actual, "Không rõ"),
     "PhanLoaiBo (Expected)": expected,
     "Tên giai đoạn (Expected)": stage_map.get(expected, "Không rõ")
