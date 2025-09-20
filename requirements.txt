@@ -2,3 +2,6 @@ streamlit
 pymongo[srv]
 pandas
 dnspython
+fastapi
+uvicorn
+pydantic
