@@ -6,7 +6,8 @@ from datetime import datetime
 app = FastAPI(title="🐄 API Phân loại giai đoạn bò")
 
 def get_mongo_collection(collection_name: str):
-    uri = "mongodb://root:tgx2025@103.48.84.200:27017/"
+    # uri = "mongodb://root:tgx2025@103.48.84.200:27017/"
+    uri = "mongodb://admin:tgx2025@103.48.84.199:27017/?authSource=admin"
     client = MongoClient(uri, serverSelectionTimeoutMS=5000)
     db = client["QuanLyTrangTraiDb"]
     return db[collection_name]
@@ -37,6 +38,7 @@ def classify(
 
         results.append({
             "_id": str(d.get("_id")),
+            "KiemTra": "✅ Đúng" if is_ok else "❌ Sai",
             "SoTai": d.get("SoTai", ""),
             "NgaySinh": str(bd),
             "SoNgayTuoi": age_days,
@@ -46,8 +48,8 @@ def classify(
             "PhanLoaiBo_DB": actual,
             "TenGiaiDoan_DB": stage_map.get(actual, "Không rõ"),
             "PhanLoaiBo_Expected": expected,
-            "TenGiaiDoan_Expected": stage_map.get(expected, "Không rõ"),
-            "KiemTra": "✅ Đúng" if is_ok else "❌ Sai"
+            "TenGiaiDoan_Expected": stage_map.get(expected, "Không rõ")
+            
         })
 
     return results

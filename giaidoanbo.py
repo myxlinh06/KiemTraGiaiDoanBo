@@ -105,8 +105,27 @@ def classify_cow(doc):
 
     # ==== Bò mẹ nuôi con / bò mang thai / bò chờ phối ====
     if gender == "cái" and group not in ["LoaiThai", "XuatBan"]:
+
+        # Nếu có thông tin sinh sản
+        tinh_trang = doc.get("TinhTrangSinhSan", "")
+        sinh_san_list = doc.get("ThongTinSinhSans", [])
+        ngay_sinh_be = None
+
+        if isinstance(sinh_san_list, list) and sinh_san_list:
+            last_child = sinh_san_list[-1]   # lấy phần tử cuối cùng
+            ngay_sinh_be = last_child.get("NgaySinh")
+
+        x = None
+        if ngay_sinh_be and (pregnant_days >= 0 or pregnant_days is None):
+            try:
+                if isinstance(ngay_sinh_be, str):
+                    ngay_sinh_be = datetime.fromisoformat(ngay_sinh_be)
+                x = (now - ngay_sinh_be).days + 1
+            except Exception:
+                x = None
+
         # Mang thai
-        if pregnant_days > 0:
+        if pregnant_days > 0 and x is None or x > 120:
             if pregnant_days <= 210:
                 return "BoMangThaiNho"
             elif pregnant_days <= 270:
@@ -128,23 +147,6 @@ def classify_cow(doc):
         ) and group != "BoVoBeo":
             return "BoXuLySinhSan"
 
-        # Nếu có thông tin sinh sản
-        tinh_trang = doc.get("TinhTrangSinhSan", "")
-        sinh_san_list = doc.get("ThongTinSinhSans", [])
-        ngay_sinh_be = None
-
-        if isinstance(sinh_san_list, list) and sinh_san_list:
-            last_child = sinh_san_list[-1]   # lấy phần tử cuối cùng
-            ngay_sinh_be = last_child.get("NgaySinh")
-
-        x = None
-        if ngay_sinh_be and (pregnant_days >= 0 or pregnant_days is None):
-            try:
-                if isinstance(ngay_sinh_be, str):
-                    ngay_sinh_be = datetime.fromisoformat(ngay_sinh_be)
-                x = (now - ngay_sinh_be).days + 1
-            except Exception:
-                x = None
 
         if x is not None:
             if 1 <= x <= 60:
