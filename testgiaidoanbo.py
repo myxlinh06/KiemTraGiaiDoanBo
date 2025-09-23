@@ -1,6 +1,7 @@
 # app_full.py
 import streamlit as st
 import pandas as pd
+import traceback
 import requests
 import threading
 import uvicorn
@@ -133,7 +134,7 @@ def predict(
 
 # Run FastAPI in background thread
 def run_api():
-    uvicorn.run(api_app, host="127.0.0.1", port=8000, log_level="error", timeout_keep_alive=120)
+    uvicorn.run(api_app, host="127.0.0.1", port=8000, log_level="error", timeout_keep_alive=600)
 
 if "api_started" not in st.session_state:
     threading.Thread(target=run_api, daemon=True).start()
@@ -141,7 +142,7 @@ if "api_started" not in st.session_state:
 
 # ========== STREAMLIT APP ==========
 st.set_page_config(page_title="🐄 Quản lý giai đoạn bò", layout="wide")
-st.title("🐄 Giao diện quản lý bò (Streamlit + FastAPI)")
+st.title("🐄 Giao diện quản lý bò")
 
 tab1, tab2 = st.tabs(["📡 Kiểm tra giai đoạn bò", "🔮 Dự đoán vòng đời"])
 
@@ -161,6 +162,7 @@ with tab1:
             "limit": limit
         }
         
+        
         try:
             res = requests.get("http://127.0.0.1:8000/giaidoanbo", params=params, timeout=600)
             if res.status_code == 200:
@@ -168,9 +170,13 @@ with tab1:
                 st.success(f"✅ Lấy {len(data)} bản ghi thành công")
                 st.dataframe(pd.DataFrame(data), use_container_width=True)
             else:
-                st.error(f"❌ Lỗi API: {res.status_code}")
+                st.error(f"❌ Lỗi API: {res.status_code}, nội dung: {res.text}")
+        except requests.exceptions.RequestException as req_err:
+            st.error(f"❌ Lỗi Requests: {req_err}")
+            st.text(traceback.format_exc())
         except Exception as e:
-            st.error(f"❌ Không kết nối được API: {e}")
+            st.error(f"❌ Lỗi khác: {e}")
+            st.text(traceback.format_exc())
 
 with tab2:
     selected_server = st.selectbox("🔗 Chọn Mongo Server (dự đoán):", list(MONGO_CONNECTIONS.keys()))
