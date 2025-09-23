@@ -1,4 +1,3 @@
-# classify.py
 from datetime import datetime, timedelta
 import math, random
 
@@ -113,6 +112,20 @@ def classify_cow(doc, now=None, gestation_days=280):
 
     return "KhongXacDinh"
 
+# ---------- Check current stage ----------
+def get_real_current_stage(doc, now=None, gestation_days=280):
+    """
+    Trả về giai đoạn hiện tại chính xác (tính theo ngày hôm nay hoặc 'now' truyền vào).
+    """
+    if now is None:
+        now = datetime.now()
+    stage_code = classify_cow(doc, now=now, gestation_days=gestation_days)
+    return {
+        "StageCode": stage_code,
+        "StageName": stage_map.get(stage_code, "Không xác định"),
+        "NgayKiemTra": now.strftime("%d/%m/%Y")
+    }
+
 # ---------- Simulation lifecycle ----------
 def simulate_lifecycle(doc, start_date, end_date, base_now=None, gestation_days=280):
     from copy import deepcopy
@@ -130,7 +143,13 @@ def simulate_lifecycle(doc, start_date, end_date, base_now=None, gestation_days=
         temp["SoNgayMangThai"] = preg_days
         if calf_age is not None: temp["SoNgayTuoiBeCon"] = calf_age
 
-        stage = classify_cow(temp, now=datetime(cur.year, cur.month, 1), gestation_days=gestation_days)
+        # nếu là tháng hiện tại → tính theo ngày hôm nay
+        if cur.year == base_now.year and cur.month == base_now.month:
+            check_date = base_now
+        else:
+            check_date = datetime(cur.year, cur.month, 1)
+
+        stage = classify_cow(temp, now=check_date, gestation_days=gestation_days)
         result[cur.strftime("%m/%Y")] = stage
 
         # tiến tới tháng kế

@@ -112,7 +112,7 @@ def classify_cow(doc):
         ngay_sinh_be = None
 
         if isinstance(sinh_san_list, list) and sinh_san_list:
-            last_child = sinh_san_list[-1]   # lấy phần tử cuối cùng
+            last_child = sinh_san_list[-1]   
             ngay_sinh_be = last_child.get("NgaySinh")
 
         x = None

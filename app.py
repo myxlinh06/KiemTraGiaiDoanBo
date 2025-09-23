@@ -84,7 +84,7 @@ def giaidoanbo(
     return results
 
 def run_api():
-    uvicorn.run(api_app, host="127.0.0.1", port=8000, log_level="error", timeout_keep_alive=120)
+    uvicorn.run(api_app, host="127.0.0.1", port=8000, log_level="error", timeout_keep_alive=5000)
 
 # Start FastAPI server in background thread
 if "api_started" not in st.session_state:
@@ -131,7 +131,7 @@ if st.button("📡 Kiểm tra dữ liệu"):
             "limit": limit
         }
         try:
-            res = requests.get("http://127.0.0.1:8000/giaidoanbo", params=params, timeout=120)
+            res = requests.get("http://127.0.0.1:8000/giaidoanbo", params=params, timeout=5000)
             if res.status_code == 200:
                 data = res.json()
                 st.success(f"✅ Lấy {len(data)} bản ghi thành công")
