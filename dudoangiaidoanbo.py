@@ -187,3 +187,100 @@ def simulate_lifecycle(doc, start_date, end_date, base_now=None, gestation_days=
 
     return result
 
+def simulate_lifecycle_with_change_dates(doc, start_date, end_date, base_now=None, gestation_days=280, preg_test_prob=0.5):
+    """
+    Mô phỏng hàng ngày và trả về dict { "dd/mm/YYYY": stage_code } mỗi khi stage thay đổi.
+    - last_breed_date: ngày phối (ngày bắt đầu đếm 45 ngày chờ test)
+    - preg_start_date: ngày xác nhận có thai (nếu test dương)
+    - preg_test_prob: xác suất test dương tại mốc >=45 ngày (mặc định 0.5)
+    """
+    from copy import deepcopy
+    if base_now is None:
+        base_now = datetime.now()
+
+    # chuẩn hóa start_date/end_date thành datetime (nếu người gọi truyền date)
+    if isinstance(start_date, datetime):
+        cur = start_date
+    else:
+        cur = datetime.combine(start_date, datetime.min.time())
+    if not isinstance(end_date, datetime):
+        end = datetime.combine(end_date, datetime.min.time())
+    else:
+        end = end_date
+
+    # khởi tạo từ doc
+    # nếu trong doc đã có SoNgayMangThai (>0), suy ra preg_start_date = cur - preg_days
+    initial_preg_days = safe_ceil(doc.get("SoNgayMangThai", 0))
+    if initial_preg_days > 0:
+        # assume thai bắt đầu initial_preg_days trước start
+        preg_start_date = cur - timedelta(days=initial_preg_days)
+    else:
+        preg_start_date = None
+
+    calf_age = safe_ceil(doc.get("SoNgayTuoiBeCon"), 0) if doc.get("SoNgayTuoiBeCon") not in (None, "") else None
+
+    last_breed_date = None   # ngày phối gần nhất (chưa confirm)
+    last_stage = None
+    result = {}
+
+    while cur <= end:
+        temp = deepcopy(doc)
+
+        # cập nhật số ngày mang thai hôm nay (nếu đã xác nhận)
+        if preg_start_date:
+            preg_days_today = (cur - preg_start_date).days
+            temp["SoNgayMangThai"] = preg_days_today
+        else:
+            temp["SoNgayMangThai"] = 0
+
+        # cập nhật tuổi bê con hôm nay (nếu có)
+        if calf_age is not None:
+            temp["SoNgayTuoiBeCon"] = calf_age
+
+        # phân loại tại ngày cur
+        stage = classify_cow(temp, now=cur, gestation_days=gestation_days)
+
+        # nếu chuyển stage so với ngày trước → ghi ngày cur (ngày chuyển)
+        if stage != last_stage:
+            result[cur.strftime("%d/%m/%Y")] = stage
+            last_stage = stage
+
+            # nếu vừa chuyển **sang** BoMoiPhoi → gán ngay ngày phối (chỉ khi chưa có last_breed_date)
+            if stage == "BoMoiPhoi" and last_breed_date is None and preg_start_date is None:
+                last_breed_date = cur
+
+        # --- xử lý sự kiện sinh sản hàng ngày ---
+        # 1) Nếu đang chờ kết quả sau phối (last_breed_date set, chưa có preg_start_date)
+        if last_breed_date and not preg_start_date:
+            days_since_breed = (cur - last_breed_date).days
+            if days_since_breed >= 45:
+                # tới ngày test --> test kết quả
+                if random.random() < preg_test_prob:
+                    # test dương -> bắt đầu tính thai từ ngày phối
+                    preg_start_date = last_breed_date
+                    # clear last_breed_date vì đã confirm
+                    last_breed_date = None
+                else:
+                    # test âm -> reset last_breed_date, coi như chưa có thai
+                    last_breed_date = None
+
+        # 2) Nếu đang mang thai, tăng ngày mang thai; nếu vượt gestation -> đẻ
+        if preg_start_date:
+            preg_days_now = (cur - preg_start_date).days
+            if preg_days_now >= gestation_days:
+                # đẻ: reset thai, khởi tạo bê con tuổi = 1 ngày
+                preg_start_date = None
+                last_breed_date = None
+                calf_age = 1
+                # stage ở vòng lặp tiếp theo sẽ là "BoMeNuoiConNho" do calf_age =1
+
+        # 3) Nếu đang nuôi con → tăng tuổi bê con
+        if calf_age is not None:
+            calf_age += 1
+            if calf_age > 120:
+                calf_age = None  # cai sữa xong
+
+        # advance one day
+        cur += timedelta(days=1)
+
+    return result

@@ -12,7 +12,7 @@ from dateutil.relativedelta import relativedelta
 
 # ================= Import logic riêng ==================
 from giaidoanbo import classify_cow, stage_map, get_age_days
-from dudoangiaidoanbo import simulate_lifecycle, parse_date
+from dudoangiaidoanbo import simulate_lifecycle, parse_date, simulate_lifecycle_with_change_dates
 
 # ================== CONFIG ==================
 MONGO_CONNECTIONS = {
@@ -80,6 +80,155 @@ def giaidoanbo(
         })
     return results
 
+# # --- API 2: Dự đoán vòng đời ---
+# @api_app.get("/dudoangiaidoanbo")
+# def predict(
+#     server: str = Query(...),
+#     trai: str = Query(...),
+#     nhom_bo: str = Query(None),
+#     phan_loai: str = Query("Tất cả"),
+#     limit: int = Query(100, ge=1),
+#     so_tai: str = Query(None),
+#     target_date: str = Query(None)
+# ):
+#     col = get_collection(server, trai)
+#     query = {}
+#     if nhom_bo:
+#         query["NhomBo"] = nhom_bo
+#     if phan_loai and phan_loai != "Tất cả":
+#         query["PhanLoaiBo"] = phan_loai
+#     if so_tai:
+#         lst = [s.strip() for s in so_tai.split(",") if s.strip()]
+#         if lst:
+#             query["SoTai"] = {"$in": lst}
+#     docs = list(col.find(query).limit(limit))
+
+#     if target_date:
+#         try:
+#             td = parse_date(target_date) or datetime.now()
+#         except:
+#             td = datetime.now()
+#     else:
+#         td = (datetime.now().replace(day=1) + relativedelta(months=6))
+
+#     res = []
+#     for d in docs:
+#         try:
+#             start = datetime.now().date().replace(day=1)
+#             end = td.date().replace(day=1)
+#             lifecycle = simulate_lifecycle_with_change_dates(d, start, end, base_now=datetime.now())
+#         except Exception as e:
+#             lifecycle = {"error": str(e)}
+
+#         out = {
+#             "_id": str(d.get("_id")),
+#             "SoTai": d.get("SoTai"),
+#             "NgaySinh": str(d.get("NgaySinh")),
+#             "NhomBo": d.get("NhomBo"),
+#             "PhanLoaiBo": d.get("PhanLoaiBo"),
+#             "TenGiaiDoan_DB": stage_map.get(d.get("PhanLoaiBo"), d.get("PhanLoaiBo")),
+#             "Prediction": lifecycle
+#         }
+#         res.append(out)
+#     return {"count": len(res), "data": res}
+
+# # Run FastAPI in background thread
+# def run_api():
+#     uvicorn.run(api_app, host="127.0.0.1", port=8000, log_level="error", timeout_keep_alive=600)
+
+# if "api_started" not in st.session_state:
+#     threading.Thread(target=run_api, daemon=True).start()
+#     st.session_state["api_started"] = True
+
+# # ========== STREAMLIT APP ==========
+# st.set_page_config(page_title="🐄 Quản lý giai đoạn bò", layout="wide")
+# st.title("🐄 Giao diện quản lý bò")
+
+# tab1, tab2 = st.tabs(["📡 Kiểm tra giai đoạn bò", "🔮 Dự đoán vòng đời"])
+
+# with tab1:
+#     selected_server = st.selectbox("🔗 Chọn Mongo Server:", list(MONGO_CONNECTIONS.keys()))
+#     selected_trai = st.selectbox("🏠 Chọn trại:", list(TRAI_COLLECTIONS.keys()))
+#     selected_group = st.selectbox("🐂 Chọn nhóm bò:", ["Tất cả", "Bo", "Be", "BoChuyenVoBeo", "BoDucGiong"])
+#     selected_phanloai = st.selectbox("📌 Chọn phân loại bò:", ["Tất cả"] + list(stage_map.keys()))
+#     limit = st.number_input("📊 Số lượng records:", min_value=1, max_value=100000, value=10)
+
+#     if st.button("📡 Kiểm tra dữ liệu"):
+#         params = {
+#             "server": selected_server,
+#             "trai": TRAI_COLLECTIONS[selected_trai],
+#             "nhom_bo": selected_group,
+#             "phan_loai": selected_phanloai,
+#             "limit": limit
+#         }
+        
+        
+#         try:
+#             res = requests.get("http://127.0.0.1:8000/giaidoanbo", params=params, timeout=600)
+#             if res.status_code == 200:
+#                 data = res.json()
+#                 st.success(f"✅ Lấy {len(data)} bản ghi thành công")
+#                 st.dataframe(pd.DataFrame(data), use_container_width=True)
+#             else:
+#                 st.error(f"❌ Lỗi API: {res.status_code}, nội dung: {res.text}")
+#         except requests.exceptions.RequestException as req_err:
+#             st.error(f"❌ Lỗi Requests: {req_err}")
+#             st.text(traceback.format_exc())
+#         except Exception as e:
+#             st.error(f"❌ Lỗi khác: {e}")
+#             st.text(traceback.format_exc())
+
+# with tab2:
+#     selected_server = st.selectbox("🔗 Chọn Mongo Server (dự đoán):", list(MONGO_CONNECTIONS.keys()))
+#     selected_trai = st.selectbox("🏠 Chọn trại (dự đoán):", list(TRAI_COLLECTIONS.keys()))
+
+#     so_tai_input = st.text_area("Nhập số tai (mỗi số 1 dòng hoặc cách nhau dấu phẩy)")
+#     target_date = st.date_input("Chọn ngày đích:", datetime.now().date() + relativedelta(months=6))
+
+#     if st.button("🔮 Dự đoán vòng đời"):
+#         so_tai = ",".join([s.strip() for s in so_tai_input.replace("\n", ",").split(",") if s.strip()])
+#         if not so_tai:
+#             st.warning("⚠️ Vui lòng nhập ít nhất 1 số tai!")
+#             st.stop()
+
+#         params = {
+#             "server": selected_server,
+#             "trai": TRAI_COLLECTIONS[selected_trai],
+#             "so_tai": so_tai,
+#             "limit": 200,  # limit lớn để không cắt mất
+#             "target_date": target_date.isoformat()
+#         }
+#         res = requests.get("http://127.0.0.1:8000/dudoangiaidoanbo", params=params, timeout=60)
+#         result = res.json()
+#         data = result["data"]
+
+#         if not data:
+#             st.warning("❌ Không tìm thấy dữ liệu cho số tai đã nhập.")
+#             st.stop()
+
+#         st.dataframe(pd.DataFrame([{
+#             "SoTai": r["SoTai"],
+#             "PhanLoaiBo_DB": r["PhanLoaiBo"],
+#             "TenGiaiDoan_DB": r["TenGiaiDoan_DB"]
+#         } for r in data]), use_container_width=True)
+
+#         # bảng dự đoán theo tháng
+#         all_months = set()
+#         for r in data: all_months.update(r["Prediction"].keys())
+#         months_sorted = sorted(list(all_months), key=lambda s: datetime.strptime(s, "%m/%Y"))
+#         rows = []
+#         for r in data:
+#             row = {"SoTai": r["SoTai"]}
+#             for m in months_sorted:
+#                 row[m] = stage_map.get(r["Prediction"].get(m, ""), "")
+#             rows.append(row)
+#         pred_df = pd.DataFrame(rows)
+#         st.subheader("🔮 Dự đoán giai đoạn theo tháng")
+#         st.dataframe(pred_df, use_container_width=True)
+
+#         csv = pred_df.to_csv(index=False).encode("utf-8")
+#         st.download_button("⬇️ Tải CSV dự đoán", csv, "predictions.csv", "text/csv")
+
 # --- API 2: Dự đoán vòng đời ---
 @api_app.get("/dudoangiaidoanbo")
 def predict(
@@ -109,14 +258,17 @@ def predict(
         except:
             td = datetime.now()
     else:
-        td = (datetime.now().replace(day=1) + relativedelta(months=6))
+        td = (datetime.now() + relativedelta(months=6))
 
     res = []
     for d in docs:
         try:
-            start = datetime.now().date().replace(day=1)
-            end = td.date().replace(day=1)
-            lifecycle = simulate_lifecycle(d, start, end, base_now=datetime.now())
+            # --- SỬA Ở ĐÂY: dùng ngày hiện tại, không ép về mùng 1 ---
+            start = datetime.now().date()  
+            end = td.date()
+            lifecycle = simulate_lifecycle_with_change_dates(
+                d, start, end, base_now=datetime.now()
+            )
         except Exception as e:
             lifecycle = {"error": str(e)}
 
@@ -127,14 +279,16 @@ def predict(
             "NhomBo": d.get("NhomBo"),
             "PhanLoaiBo": d.get("PhanLoaiBo"),
             "TenGiaiDoan_DB": stage_map.get(d.get("PhanLoaiBo"), d.get("PhanLoaiBo")),
-            "Prediction": lifecycle
+            "Prediction": lifecycle,
         }
         res.append(out)
     return {"count": len(res), "data": res}
 
+
 # Run FastAPI in background thread
 def run_api():
-    uvicorn.run(api_app, host="127.0.0.1", port=8000, log_level="error", timeout_keep_alive=600)
+    uvicorn.run(api_app, host="127.0.0.1", port=8000, log_level="error", timeout_keep_alive=6000)
+
 
 if "api_started" not in st.session_state:
     threading.Thread(target=run_api, daemon=True).start()
@@ -159,12 +313,11 @@ with tab1:
             "trai": TRAI_COLLECTIONS[selected_trai],
             "nhom_bo": selected_group,
             "phan_loai": selected_phanloai,
-            "limit": limit
+            "limit": limit,
         }
-        
-        
+
         try:
-            res = requests.get("http://127.0.0.1:8000/giaidoanbo", params=params, timeout=600)
+            res = requests.get("http://127.0.0.1:8000/giaidoanbo", params=params, timeout=6000)
             if res.status_code == 200:
                 data = res.json()
                 st.success(f"✅ Lấy {len(data)} bản ghi thành công")
@@ -195,8 +348,8 @@ with tab2:
             "server": selected_server,
             "trai": TRAI_COLLECTIONS[selected_trai],
             "so_tai": so_tai,
-            "limit": 200,  # limit lớn để không cắt mất
-            "target_date": target_date.isoformat()
+            "limit": 200,
+            "target_date": target_date.isoformat(),
         }
         res = requests.get("http://127.0.0.1:8000/dudoangiaidoanbo", params=params, timeout=60)
         result = res.json()
@@ -206,25 +359,51 @@ with tab2:
             st.warning("❌ Không tìm thấy dữ liệu cho số tai đã nhập.")
             st.stop()
 
-        st.dataframe(pd.DataFrame([{
-            "SoTai": r["SoTai"],
-            "PhanLoaiBo_DB": r["PhanLoaiBo"],
-            "TenGiaiDoan_DB": r["TenGiaiDoan_DB"]
-        } for r in data]), use_container_width=True)
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "SoTai": r["SoTai"],
+                        "PhanLoaiBo_DB": r["PhanLoaiBo"],
+                        "TenGiaiDoan_DB": r["TenGiaiDoan_DB"],
+                    }
+                    for r in data
+                ]
+            ),
+            use_container_width=True,
+        )
 
-        # bảng dự đoán theo tháng
-        all_months = set()
-        for r in data: all_months.update(r["Prediction"].keys())
-        months_sorted = sorted(list(all_months), key=lambda s: datetime.strptime(s, "%m/%Y"))
+                # bảng dự đoán theo ngày đổi giai đoạn
+        all_keys = set()
+
+        # 🔹 Bổ sung danh sách tất cả các tháng từ start → end
+        start_date = datetime.now().date()
+        end_date = target_date
+        cur = start_date.replace(day=1)
+        full_keys = []
+        while cur <= end_date:
+            full_keys.append(cur.strftime("%d/%m/%Y"))
+            # sang tháng kế tiếp
+            if cur.month == 12:
+                cur = cur.replace(year=cur.year + 1, month=1)
+            else:
+                cur = cur.replace(month=cur.month + 1)
+        all_keys.update(full_keys)
+
+        # 🔹 Đồng thời cộng thêm các ngày thay đổi giai đoạn (nếu có)
+        for r in data:
+            all_keys.update(r["Prediction"].keys())
+
+        # sắp xếp tất cả key theo ngày
+        keys_sorted = sorted(list(all_keys), key=lambda s: datetime.strptime(s, "%d/%m/%Y"))
+
         rows = []
         for r in data:
             row = {"SoTai": r["SoTai"]}
-            for m in months_sorted:
-                row[m] = stage_map.get(r["Prediction"].get(m, ""), "")
+            for k in keys_sorted:
+                row[k] = stage_map.get(r["Prediction"].get(k, ""), "")
             rows.append(row)
-        pred_df = pd.DataFrame(rows)
-        st.subheader("🔮 Dự đoán giai đoạn theo tháng")
-        st.dataframe(pred_df, use_container_width=True)
 
-        csv = pred_df.to_csv(index=False).encode("utf-8")
-        st.download_button("⬇️ Tải CSV dự đoán", csv, "predictions.csv", "text/csv")
+        pred_df = pd.DataFrame(rows)
+        st.subheader("🔮 Dự đoán giai đoạn (theo ngày đổi giai đoạn + các tháng)")
+        st.dataframe(pred_df, use_container_width=True)
