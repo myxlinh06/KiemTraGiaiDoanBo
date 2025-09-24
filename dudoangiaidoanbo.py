@@ -112,7 +112,7 @@ def classify_cow(doc, now=None, gestation_days=280):
 
     return "KhongXacDinh"
 
-# ---------- Check current stage ----------
+# ---------- Xác định giai đoạn bò hiện tại ----------
 def get_real_current_stage(doc, now=None, gestation_days=280):
     """
     Trả về giai đoạn hiện tại chính xác (tính theo ngày hôm nay hoặc 'now' truyền vào).
@@ -166,8 +166,8 @@ def simulate_lifecycle(doc, start_date, end_date, base_now=None, gestation_days=
                 calf_age = 1
         else:
             if stage == "BoMoiPhoi":
-                # sau khi phối 10 ngày → coi như có thai
-                preg_days = 10
+                # sau khi phối 45 ngày → coi như có thai
+                preg_days = 45
             elif stage == "BoChoPhoi":
                 # kiểm tra lịch khám
                 if random.random() < 0.5:
@@ -186,3 +186,4 @@ def simulate_lifecycle(doc, start_date, end_date, base_now=None, gestation_days=
         cur = next_cur
 
     return result
+
