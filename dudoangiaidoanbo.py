@@ -187,18 +187,23 @@ def simulate_lifecycle(doc, start_date, end_date, base_now=None, gestation_days=
 
     return result
 
-def simulate_lifecycle_with_change_dates(doc, start_date, end_date, base_now=None, gestation_days=280, preg_test_prob=0.5):
+def simulate_lifecycle_with_change_dates(doc, start_date, end_date,
+                                         base_now=None,
+                                         gestation_days=280,
+                                         preg_test_prob=0.5):
     """
-    Mô phỏng hàng ngày và trả về dict { "dd/mm/YYYY": stage_code } mỗi khi stage thay đổi.
-    - last_breed_date: ngày phối (ngày bắt đầu đếm 45 ngày chờ test)
-    - preg_start_date: ngày xác nhận có thai (nếu test dương)
-    - preg_test_prob: xác suất test dương tại mốc >=45 ngày (mặc định 0.5)
+    Mô phỏng vòng đời bò theo bảng giai đoạn & hành vi sinh sản.
+    Trả về dict { "dd/mm/YYYY": stage_code } khi stage thay đổi.
     """
+
     from copy import deepcopy
+    from datetime import datetime, timedelta
+    import random
+
     if base_now is None:
         base_now = datetime.now()
 
-    # chuẩn hóa start_date/end_date thành datetime (nếu người gọi truyền date)
+    # chuẩn hóa start_date / end_date
     if isinstance(start_date, datetime):
         cur = start_date
     else:
@@ -208,79 +213,98 @@ def simulate_lifecycle_with_change_dates(doc, start_date, end_date, base_now=Non
     else:
         end = end_date
 
-    # khởi tạo từ doc
-    # nếu trong doc đã có SoNgayMangThai (>0), suy ra preg_start_date = cur - preg_days
+    # trạng thái ban đầu
     initial_preg_days = safe_ceil(doc.get("SoNgayMangThai", 0))
     if initial_preg_days > 0:
-        # assume thai bắt đầu initial_preg_days trước start
         preg_start_date = cur - timedelta(days=initial_preg_days)
     else:
         preg_start_date = None
 
-    calf_age = safe_ceil(doc.get("SoNgayTuoiBeCon"), 0) if doc.get("SoNgayTuoiBeCon") not in (None, "") else None
+    calf_age = safe_ceil(doc.get("SoNgayTuoiBeCon", 0)) if doc.get("SoNgayTuoiBeCon") not in (None, "") else None
 
-    last_breed_date = None   # ngày phối gần nhất (chưa confirm)
+    last_breed_date = None   # ngày phối gần nhất
+    last_wait_date = None    # ngày bắt đầu chờ phối
     last_stage = None
     result = {}
 
     while cur <= end:
         temp = deepcopy(doc)
 
-        # cập nhật số ngày mang thai hôm nay (nếu đã xác nhận)
+        # cập nhật số ngày mang thai hôm nay (nếu có)
         if preg_start_date:
-            preg_days_today = (cur - preg_start_date).days
-            temp["SoNgayMangThai"] = preg_days_today
+            temp["SoNgayMangThai"] = (cur - preg_start_date).days
         else:
             temp["SoNgayMangThai"] = 0
 
-        # cập nhật tuổi bê con hôm nay (nếu có)
+        # cập nhật tuổi bê con
         if calf_age is not None:
             temp["SoNgayTuoiBeCon"] = calf_age
 
-        # phân loại tại ngày cur
+        # phân loại stage hiện tại
         stage = classify_cow(temp, now=cur, gestation_days=gestation_days)
 
-        # nếu chuyển stage so với ngày trước → ghi ngày cur (ngày chuyển)
+        # khi stage thay đổi → ghi nhận
         if stage != last_stage:
             result[cur.strftime("%d/%m/%Y")] = stage
             last_stage = stage
-
-            # nếu vừa chuyển **sang** BoMoiPhoi → gán ngay ngày phối (chỉ khi chưa có last_breed_date)
-            if stage == "BoMoiPhoi" and last_breed_date is None and preg_start_date is None:
+            if stage == "BoChoPhoi":
+                last_wait_date = cur
+            if stage == "BoMoiPhoi":
                 last_breed_date = cur
 
-        # --- xử lý sự kiện sinh sản hàng ngày ---
-        # 1) Nếu đang chờ kết quả sau phối (last_breed_date set, chưa có preg_start_date)
+        # ====== XỬ LÝ HÀNH VI SỰ KIỆN ======
+
+        # 1) Bò chờ phối → sau 30 ngày thì sang "Bò mới phối"
+        if last_wait_date and not last_breed_date and not preg_start_date:
+            days_wait = (cur - last_wait_date).days
+            if days_wait >= 30:
+                last_breed_date = cur
+                stage = "BoMoiPhoi"
+                result[cur.strftime("%d/%m/%Y")] = stage
+                last_stage = stage
+                last_wait_date = None
+
+        # 2) Bò mới phối → sau 50 ngày chắc chắn thành mang thai
         if last_breed_date and not preg_start_date:
             days_since_breed = (cur - last_breed_date).days
-            if days_since_breed >= 45:
-                # tới ngày test --> test kết quả
-                if random.random() < preg_test_prob:
-                    # test dương -> bắt đầu tính thai từ ngày phối
-                    preg_start_date = last_breed_date
-                    # clear last_breed_date vì đã confirm
-                    last_breed_date = None
-                else:
-                    # test âm -> reset last_breed_date, coi như chưa có thai
-                    last_breed_date = None
+            if days_since_breed >= 50:
+                preg_start_date = last_breed_date
+                last_breed_date = None
+                stage = "BoMangThaiNho"
+                result[cur.strftime("%d/%m/%Y")] = stage
+                last_stage = stage
 
-        # 2) Nếu đang mang thai, tăng ngày mang thai; nếu vượt gestation -> đẻ
+        # 3) Nếu đang có thai → đến ngày đẻ
         if preg_start_date:
             preg_days_now = (cur - preg_start_date).days
             if preg_days_now >= gestation_days:
-                # đẻ: reset thai, khởi tạo bê con tuổi = 1 ngày
+                # đẻ: reset thai, tạo bê con
                 preg_start_date = None
                 last_breed_date = None
-                calf_age = 1
-                # stage ở vòng lặp tiếp theo sẽ là "BoMeNuoiConNho" do calf_age =1
+                calf_age = 1  # bê sơ sinh
+                stage = "BoMeNuoiConNho"
+                result[cur.strftime("%d/%m/%Y")] = stage
+                last_stage = stage
 
-        # 3) Nếu đang nuôi con → tăng tuổi bê con
+        # 4) Nếu đang nuôi con → tăng tuổi bê con
         if calf_age is not None:
             calf_age += 1
             if calf_age > 120:
-                calf_age = None  # cai sữa xong
+                calf_age = None
+                stage = "BoChoPhoi"
+                result[cur.strftime("%d/%m/%Y")] = stage
+                last_stage = stage
+                last_wait_date = cur
+            elif 61 <= calf_age <= 120:
+                # 5% cơ hội được phối ngay
+                if random.random() < 0.05 and not preg_start_date and not last_breed_date:
+                    calf_age = None
+                    last_breed_date = cur
+                    stage = "BoMoiPhoi"
+                    result[cur.strftime("%d/%m/%Y")] = stage
+                    last_stage = stage
 
-        # advance one day
+        # advance 1 ngày
         cur += timedelta(days=1)
 
     return result
